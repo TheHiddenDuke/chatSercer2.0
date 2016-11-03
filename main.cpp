@@ -9,7 +9,7 @@ int main(int argc , char *argv[])
     SOCKET master , new_socket , client_socket[30] , s;
     struct sockaddr_in server, address;
     int max_clients = 30 , activity, addrlen, i, valread;
-    char *message = "ECHO Daemon v1.0 \r\n";
+    char *message = "Velkommen til den beste serveren på moder jord \r\n";
 
     //size of our receive buffer, this is string length.
     int MAXRECV = 1024;
