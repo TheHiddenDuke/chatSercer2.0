@@ -5,6 +5,7 @@
 #include <thread>
 #include <string>
 #include <sstream>
+#include <sys/time.h>
 
 #pragma comment(lib, "ws2_32.lib") //Winsock Library
 #define MAX_CLIENT 30
@@ -17,6 +18,11 @@ int main(int argc , char *argv[])
     int max_clients = 30 , activity, addrlen, i, valread, numberofclients = 0;
     char message[1024], status_message[1024];
     boolean run = true;
+
+    struct __ms_timeval timeout;
+    timeout.tv_usec = 5;
+    timeout.tv_sec = 0;
+
 
     //size of our receive buffer, this is string length.
     int MAXRECV = 1024;
@@ -105,8 +111,7 @@ int main(int argc , char *argv[])
         }
 
         //wait for an activity on any of the sockets, timeout is NULL , so wait indefinitely
-        activity = select( 0 , &readfds , NULL , NULL , NULL);
-
+        activity = select( 0 , &readfds , NULL , NULL , &timeout);
         if ( activity == SOCKET_ERROR )
         {
             printf("select call failed with error code : %d" , WSAGetLastError());
@@ -223,6 +228,7 @@ sender.join();
     //Shutdowns all connections
 
 for(i = 0; i < MAX_CLIENT; i++) {
+    std::cout << "Shutting down client: " << client_socket[i] << std::endl;
     shutdown(client_socket[i], SD_SEND);
 }
     closesocket(s);
