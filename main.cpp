@@ -1,15 +1,21 @@
 #include<stdio.h>
 #include<winsock2.h>
+#include<iostream>
+//#include <cygwin/in.h>
+#include <thread>
+#include <string>
 
 #pragma comment(lib, "ws2_32.lib") //Winsock Library
+#define MAX_CLIENT 30
 
 int main(int argc , char *argv[])
 {
     WSADATA wsa;
-    SOCKET master , new_socket , client_socket[30] , s;
+    SOCKET master , new_socket , client_socket[MAX_CLIENT] , s;
     struct sockaddr_in server, address;
-    int max_clients = 30 , activity, addrlen, i, valread;
-    char *message = "Velkommen til den beste serveren på moder jord \r\n";
+    int max_clients = 30 , activity, addrlen, i, valread, numberofclients = 0;
+    char *message = "";
+    boolean run = true;
 
     //size of our receive buffer, this is string length.
     int MAXRECV = 1024;
@@ -45,7 +51,7 @@ int main(int argc , char *argv[])
     //Prepare the sockaddr_in structure
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons( 27030 );
+    server.sin_port = htons( 8888 );
 
     //Bind
     if( bind(master ,(struct sockaddr *)&server , sizeof(server)) == SOCKET_ERROR)
@@ -64,8 +70,21 @@ int main(int argc , char *argv[])
 
     addrlen = sizeof(struct sockaddr_in);
 
-    while(TRUE)
+    std::thread sender([&] {
+        while (*message!='q') {
+            std::cin.getline(message, 1024);
+
+            for(int j = 0; j < MAX_CLIENT; j++)
+            {
+                send( client_socket[j] , message , strlen(message) , 0 );
+            }
+        }
+        run = false;
+    });
+
+    while(run)
     {
+
         //clear the socket fd set
         FD_ZERO(&readfds);
 
@@ -102,6 +121,8 @@ int main(int argc , char *argv[])
 
             //inform user of socket number - used in send and receive commands
             printf("New connection , socket fd is %d , ip is : %s , port : %d \n" , new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
+            numberofclients++;
+            std::cout <<"Antall klienter: " << numberofclients << std::endl;
 
             //send new connection greeting message
             if( send(new_socket, message, strlen(message), 0) != strlen(message) )
@@ -144,6 +165,8 @@ int main(int argc , char *argv[])
                     {
                         //Somebody disconnected , get his details and print
                         printf("Host disconnected unexpectedly , ip %s , port %d \n" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
+                        numberofclients--;
+                        std::cout << "Antall klienter: " << numberofclients << std::endl;
 
                         //Close the socket and mark as 0 in list for reuse
                         closesocket( s );
@@ -158,6 +181,8 @@ int main(int argc , char *argv[])
                 {
                     //Somebody disconnected , get his details and print
                     printf("Host disconnected , ip %s , port %d \n" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
+                    numberofclients--;
+                    std::cout << "Antall klienter: " << numberofclients << std::endl;
 
                     //Close the socket and mark as 0 in list for reuse
                     closesocket( s );
@@ -168,14 +193,29 @@ int main(int argc , char *argv[])
                 else
                 {
                     //add null character, if you want to use with printf/puts or other string handling functions
+
+                    //std::string temp; //for username
                     buffer[valread] = '\0';
+                    //std::cout << inet_ntoa(address.sin_addr) << ":" << ntohs(address.sin_port) << buffer << "\n\n" << std::endl;
                     printf("%s:%d - %s \n" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port), buffer);
-                    send( s , buffer , valread , 0 );
+                    for(int j = 0; j < MAX_CLIENT; j++)
+                    {
+                        if(j != i)
+                        {
+                            send( client_socket[j] , buffer , valread + 1, 0 );
+                        }
+                    }
                 }
             }
         }
     }
+sender.join();
 
+    //Shutdowns all connections
+
+for(i = 0; i < MAX_CLIENT; i++) {
+    shutdown(client_socket[i], SD_SEND);
+}
     closesocket(s);
     WSACleanup();
 
