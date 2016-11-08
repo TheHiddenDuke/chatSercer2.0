@@ -4,6 +4,7 @@
 //#include <cygwin/in.h>
 #include <thread>
 #include <string>
+#include <sstream>
 
 #pragma comment(lib, "ws2_32.lib") //Winsock Library
 #define MAX_CLIENT 30
@@ -14,7 +15,7 @@ int main(int argc , char *argv[])
     SOCKET master , new_socket , client_socket[MAX_CLIENT] , s;
     struct sockaddr_in server, address;
     int max_clients = 30 , activity, addrlen, i, valread, numberofclients = 0;
-    char *message = "";
+    char message[1024], status_message[1024];
     boolean run = true;
 
     //size of our receive buffer, this is string length.
@@ -71,15 +72,17 @@ int main(int argc , char *argv[])
     addrlen = sizeof(struct sockaddr_in);
 
     std::thread sender([&] {
-        while (*message!='q') {
+        while (run) {
             std::cin.getline(message, 1024);
-
-            for(int j = 0; j < MAX_CLIENT; j++)
-            {
-                send( client_socket[j] , message , strlen(message) , 0 );
+            if (*message != 'q') {
+                for (int j = 0; j < MAX_CLIENT; j++) {
+                    send(client_socket[j], message, strlen(message), 0);
+                }
+            } else {
+                std::cout << "shutting down" << std::endl;
+                run = false;
             }
         }
-        run = false;
     });
 
     while(run)
@@ -92,7 +95,7 @@ int main(int argc , char *argv[])
         FD_SET(master, &readfds);
 
         //add child sockets to fd set
-        for (  i = 0 ; i < max_clients ; i++)
+        for (  i = 0 ; i < MAX_CLIENT ; i++)
         {
             s = client_socket[i];
             if(s > 0)
@@ -123,6 +126,12 @@ int main(int argc , char *argv[])
             printf("New connection , socket fd is %d , ip is : %s , port : %d \n" , new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
             numberofclients++;
             std::cout <<"Antall klienter: " << numberofclients << std::endl;
+
+            snprintf(status_message,sizeof(status_message), "Antall klienter: %d",numberofclients);
+            for(int j = 0; j < MAX_CLIENT; j++)
+            {
+                send( client_socket[j] , status_message , strlen(status_message) , 0 );
+            }
 
             //send new connection greeting message
             if( send(new_socket, message, strlen(message), 0) != strlen(message) )
