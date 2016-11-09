@@ -3,12 +3,12 @@
 #include<iostream>
 //#include <cygwin/in.h>
 #include <thread>
-#include <string>
 #include <sstream>
-#include <sys/time.h>
+
 
 #pragma comment(lib, "ws2_32.lib") //Winsock Library
 #define MAX_CLIENT 30
+#define MAX_RECV 1024
 
 int main(int argc , char *argv[])
 {
@@ -16,27 +16,27 @@ int main(int argc , char *argv[])
     SOCKET master , new_socket , client_socket[MAX_CLIENT] , s;
     struct sockaddr_in server, address;
     int max_clients = 30 , activity, addrlen, i, valread, numberofclients = 0;
-    char message[1024], status_message[1024];
+    char message[MAX_RECV], status_message[MAX_RECV];
     boolean run = true;
 
+    //Struct for select timeout
     struct __ms_timeval timeout;
     timeout.tv_usec = 5;
     timeout.tv_sec = 0;
 
-
-    //size of our receive buffer, this is string length.
-    int MAXRECV = 1024;
     //set of socket descriptors
     fd_set readfds;
     //1 extra for null character, string termination
     char *buffer;
-    buffer =  (char*) malloc((MAXRECV + 1) * sizeof(char));
+    buffer =  (char*) malloc((MAX_RECV + 1) * sizeof(char));
 
+    //initialising sockets in socket array
     for(i = 0 ; i < 30;i++)
     {
         client_socket[i] = 0;
     }
 
+    //Startup for Winsock
     printf("\nInitialising Winsock...");
     if (WSAStartup(MAKEWORD(2,2),&wsa) != 0)
     {
@@ -46,7 +46,7 @@ int main(int argc , char *argv[])
 
     printf("Initialised.\n");
 
-    //Create a socket
+    //Create master socket
     if((master = socket(AF_INET , SOCK_STREAM , 0 )) == INVALID_SOCKET)
     {
         printf("Could not create socket : %d" , WSAGetLastError());
@@ -77,9 +77,12 @@ int main(int argc , char *argv[])
 
     addrlen = sizeof(struct sockaddr_in);
 
+    //Lambda thread for server messages
     std::thread sender([&] {
         while (run) {
             std::cin.getline(message, 1024);
+
+            //When message == q, runs et to false and stops the server
             if (*message != 'q') {
                 for (int j = 0; j < MAX_CLIENT; j++) {
                     send(client_socket[j], message, strlen(message), 0);
@@ -110,7 +113,7 @@ int main(int argc , char *argv[])
             }
         }
 
-        //wait for an activity on any of the sockets, timeout is NULL , so wait indefinitely
+        //wait for an activity on any of the sockets
         activity = select( 0 , &readfds , NULL , NULL , &timeout);
         if ( activity == SOCKET_ERROR )
         {
@@ -129,6 +132,8 @@ int main(int argc , char *argv[])
 
             //inform user of socket number - used in send and receive commands
             printf("New connection , socket fd is %d , ip is : %s , port : %d \n" , new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
+
+            //increase number of clients and send a message to all clients
             numberofclients++;
             std::cout <<"Antall klienter: " << numberofclients << std::endl;
 
@@ -170,14 +175,14 @@ int main(int argc , char *argv[])
 
                 //Check if it was for closing , and also read the incoming message
                 //recv does not place a null terminator at the end of the string (whilst printf %s assumes there is one).
-                valread = recv( s , buffer, MAXRECV, 0);
+                valread = recv( s , buffer, MAX_RECV, 0);
 
                 if( valread == SOCKET_ERROR)
                 {
                     int error_code = WSAGetLastError();
                     if(error_code == WSAECONNRESET)
                     {
-                        //Somebody disconnected , get his details and print
+                        //Somebody disconnected , get his details and print and gives new number of client message
                         printf("Host disconnected unexpectedly , ip %s , port %d \n" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
                         numberofclients--;
                         std::cout << "Antall klienter: " << numberofclients << std::endl;
@@ -193,7 +198,7 @@ int main(int argc , char *argv[])
                 }
                 if ( valread == 0)
                 {
-                    //Somebody disconnected , get his details and print
+                    //Somebody disconnected , get his details and print, new number of client message given
                     printf("Host disconnected , ip %s , port %d \n" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port));
                     numberofclients--;
                     std::cout << "Antall klienter: " << numberofclients << std::endl;
@@ -203,14 +208,13 @@ int main(int argc , char *argv[])
                     client_socket[i] = 0;
                 }
 
-                //Echo back the message that came in
+                //Echo back the message that came in to all clients
                 else
                 {
                     //add null character, if you want to use with printf/puts or other string handling functions
 
-                    //std::string temp; //for username
                     buffer[valread] = '\0';
-                    //std::cout << inet_ntoa(address.sin_addr) << ":" << ntohs(address.sin_port) << buffer << "\n\n" << std::endl;
+
                     printf("%s:%d - %s \n" , inet_ntoa(address.sin_addr) , ntohs(address.sin_port), buffer);
                     for(int j = 0; j < MAX_CLIENT; j++)
                     {
@@ -227,8 +231,8 @@ sender.join();
 
     //Shutdowns all connections
 
-for(i = 0; i < MAX_CLIENT; i++) {
-    std::cout << "Shutting down client: " << client_socket[i] << std::endl;
+for(i = 0; i < numberofclients; i++) {
+    std::cout << "Shutting down client: " << i << std::endl;
     shutdown(client_socket[i], SD_SEND);
 }
     closesocket(s);
